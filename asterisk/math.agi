@@ -1,0 +1,158 @@
+#!/usr/bin/perl
+#
+
+use strict;
+
+$|=1;
+# Setup some variables
+my %AGI; my $DEBUG=1;
+
+my $min=1;
+my $max=10;
+
+while (<STDIN>) {
+	chomp;
+	last unless length($_);
+	if (/^agi_(\w+)\:\s+(.*)$/) {
+		$AGI{$1} = $2;
+	}
+}
+
+# setup options
+my $PRECACHE = 0;
+my $SHOWGREET = 1;
+
+$PRECACHE = 1 if $ARGV[1] =~ /p/;
+
+my $FESTIVALCACHE = "/var/mathcache";
+if (! -e $FESTIVALCACHE) {
+	`mkdir -p -m0776 $FESTIVALCACHE`;
+}
+
+# make sure we have some essential files
+if (! -e "$FESTIVALCACHE/math_greet.ul") {
+	`echo "Welcome to the Math Questions" | text2wave -o $FESTIVALCACHE/math_greet.ul -otype ulaw -`;
+}
+
+if ($SHOWGREET) {
+   print "EXEC Playback \"$FESTIVALCACHE/math_greet\"\n";
+   my $result = <STDIN>; #&check_result($result);
+}
+
+while( 1 )
+{
+   math_quiz();
+}
+
+exit 0;
+
+##########################################################################
+
+############ check_result ##########
+## Use this to check the result of  #
+## a sent command                   #
+## I pretty much stole this from    #
+## the regular agi-test.agi         #
+#####################################
+sub checkresult {
+    my ($res) = @_;
+    my $retval;
+    chomp $res;
+    if ($res =~ /^200/) {
+       $res =~ /result=(-?\d+)/;
+       if (!length($1)) {
+          print DEBUGOUT "FAIL ($res)\n";
+          exit(1);
+       } elsif ($DEBUG=1){
+          print DEBUGOUT "PASS ($1)\n";
+       }
+   } else {
+      print STDERR "FAIL (unexpected result '$res')\n";
+      exit(1);
+   }
+}
+
+############ say_number ############
+## Use this to say a number         #
+## over the channel                 #
+##                                  #
+#####################################
+sub say_number {
+        my ($mynumber) = @_;
+        chomp($mynumber);
+        if ($DEBUG == 1 ) {
+           print DEBUGOUT "Saying number $mynumber \n";
+        }
+        print "SAY NUMBER $mynumber \"0123456789\"\n";
+        my $result = <STDIN>;
+        &checkresult($result);
+        $result =~ /result=(-?\d+)/;
+        return $1;
+}
+
+############ send_file #############
+## Use this to send a wave file on  #
+## the channel                      #
+##                                  #
+#####################################
+sub send_file {
+   my ($myfile) = @_;
+   chomp($myfile);
+   if ($DEBUG == 1 ) {
+     print DEBUGOUT "Sending stream $myfile \n";
+   }
+   print "STREAM FILE $myfile \"0123456789\"\n";
+   my $result = <STDIN>;
+   &checkresult($result);
+   $result =~ /result=(-?\d+)/;
+   return $1;
+}
+
+######## get_data ##################
+## Feed with (file, maxnumbers)     #
+## where file is the sound file     #
+## to be played and maxnumbers is   #
+## the maximum amount of digits to  #
+## allow in the answer              #
+#####################################
+sub get_data {
+   my @mydata = @_;
+   my $myfile = $mydata[0];
+   my $mymax = $mydata[1];
+   if ($DEBUG == 1 ) {
+      print DEBUGOUT "Getting data \n";
+   }
+   print "GET DATA $myfile 5000 $mymax \n";
+   #print "GET DATA $myfile 15000 $mymax \n";
+   my $result = <STDIN>;
+   &checkresult($result);
+   $result =~ /result=(-?\d+)/;
+   return $1;
+}
+
+
+sub math_quiz {
+   my $f;
+   my $s;
+   my $ret;
+   $ret = 0;
+   $f = int(rand($max-$min))+$min;
+   $s = int(rand($max-$min))+$min;
+   #$s = int(rand(10));
+
+   &say_number($f);
+   &send_file("with");
+   &say_number($s);
+
+   my $tmp = &get_data("silence/1",2);
+
+   my $answer = $f + $s;
+   if( $tmp == $answer )
+   {
+	    $ret = &send_file("good");
+   }
+   else
+   {
+	   $ret = &send_file("bad");
+   }
+}
